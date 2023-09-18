@@ -1,0 +1,166 @@
+function init(self)
+	self.stack = {}
+end
+
+local function move(id, x, y, z, speed, easing)
+	local pos = go.get_position(id)
+
+	if x then
+		pos.x = x
+	end
+	if y then
+		pos.y = y
+	end
+	if z then
+		pos.z = z
+	end
+
+			
+	if speed then
+		go.animate(id, "position", go.PLAYBACK_ONCE_FORWARD, pos, easing or go.EASING_LINEAR, speed)
+	else
+		go.set_position(pos, id)
+	end
+end
+
+local function scale_sprite(id, x, y, speed, easing, sprite)
+	local scale = go.get_scale_vector(id .. sprite)
+	if x then
+		scale.x = x
+	end
+	if y then
+		scale.y = y
+	end
+			
+	if speed then
+		go.animate(id .. sprite, "scale", go.PLAYBACK_ONCE_FORWARD, scale, easing or go.EASING_LINEAR, speed)
+	else
+		go.set(id .. sprite, "scale", scale)
+	end
+end
+
+local function scale(id, x, y, speed, easing)
+	local scale = go.get_scale_vector(id)
+	if x then
+		scale.x = x
+	end
+	if y then
+		scale.y = y
+	end
+			
+	if speed then
+		go.animate(id, "scale", go.PLAYBACK_ONCE_FORWARD, scale.x, easing or go.EASING_LINEAR, speed)
+	else
+		go.set_scale(scale, id)
+	end
+end
+
+local function hide(id, speed, sprite)
+	if speed then
+		go.animate(id .. sprite, "tint.w", go.PLAYBACK_ONCE_FORWARD, 0, go.EASING_LINEAR, speed, 0, 
+		function()
+			msg.post(id .. sprite, "disable")
+		end)
+	else
+		go.set(id .. sprite, "tint.w", 0)
+		msg.post(id .. sprite, "disable")
+	end
+end
+
+local function show(id, speed, sprite)
+	msg.post(id .. sprite, "enable")
+	if speed then
+		go.animate(id .. sprite, "tint.w", go.PLAYBACK_ONCE_FORWARD, 1, go.EASING_LINEAR, speed)
+	else
+		go.set(id .. sprite, "tint.w", 1)
+	end
+end
+
+local function parse_ids(val)
+	local s = string.gsub(val, " ", "")
+	return string.gmatch(s, "([^,]+)")
+end
+
+local function animate(id, prop, to, speed, easing, target)
+	local path = id .. target
+	if target == "." then
+		path = target
+	end
+	go.animate(path, prop, go.PLAYBACK_ONCE_FORWARD, to or 0, easing or go.EASING_LINEAR, speed or 0)
+end
+
+function process(self, action)
+
+	if action.move then
+		for id in parse_ids(action.move) do
+			move(id, action.x, action.y, action.z, action.speed, action.easing)
+		end
+	end
+
+	if action.scale and action.target ~= "." then
+		for id in parse_ids(action.scale) do
+			scale_sprite(id, action.x, action.y, action.speed, action.easing, action.target or "#sprite")
+		end
+	elseif action.scale then
+		for id in parse_ids(action.scale) do
+			scale(id, action.x, action.y, action.speed, action.easing)
+		end
+	end
+
+	if action.show then
+		for id in parse_ids(action.show) do
+			show(id, action.speed, action.target or "#sprite")
+		end
+	end
+
+	if action.hide then
+		for id in parse_ids(action.hide) do
+			hide(id, action.speed, action.target or "#sprite")
+		end
+	end
+
+	if action.animate and type(action.animate) ~= "table" then
+		for id in parse_ids(action.animate) do
+			animate(id, action.prop, action.to, action.speed, action.easing, action.target or "#sprite")
+		end
+	end
+
+	if action.msg then
+		msg.post(action.target or ".", action.msg, action.data or {})
+	end
+
+	if action.delete then
+		--TODO: remove from stack
+		for id in parse_ids(action.delete) do
+			pcall(function () 
+				go.delete(id, true)
+			end)
+		end
+	end
+end
+
+function on_message(self, message_id, message, sender)
+	if message_id == hash("action") then
+		if message.move or message.scale then
+			local clone = {}
+			for key, _ in pairs(message) do
+				clone[key] = message[key]
+			end
+			clone.speed = nil
+			table.insert(self.stack, clone)
+		end
+
+		process (self, message)
+
+	elseif message_id == hash("load_image") then
+		local img = imageloader.load({
+			data = sys.load_resource("/assets/" .. message.file)
+		})
+		resource.set_texture(go.get(message.url, "texture0"), img.header, img.buffer )
+
+	elseif message_id == hash("reset") then
+		for _, action in ipairs(self.stack) do
+			process (self, action)
+		end
+	end
+end

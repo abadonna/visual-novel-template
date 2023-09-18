@@ -1,0 +1,554 @@
+require 'utf8'
+local S = require 'local.strings'
+
+function init(self)
+	self.typing = 0
+	self.selectors = {}
+	self.text_node = gui.get_node("text")
+	self.text_pos = gui.get_position(self.text_node)
+	self.speaker_node = gui.get_node("speaker")
+	self.text_panel = gui.get_node("prompt")
+
+	self.portrait = gui.get_node("portrait")
+	self.shadow = gui.get_node("shadow")
+
+	gui.set_enabled(self.portrait, false)
+	gui.set_enabled(self.speaker_node, false)
+
+	local color = gui.get_color(self.text_panel)
+	self.prompt_alpha = color.w
+	color.w = 0
+	gui.set_color(self.text_panel, color)
+
+	self.options = {}
+	self.text_color = gui.get_color(self.text_node)
+	gui.set_render_order(2)
+
+end
+
+local function type_text(self, node)
+	local options = self.options[node]
+	if options == nil then
+		self.typing = 0
+		msg.post(".", "text_done", {pass = self.pass})
+		return
+	end
+
+	if options.text == options.current_text then
+		self.typing = math.max(self.typing - 1, 0)
+		if self.typing == 0 then
+			msg.post(".", "text_done", {pass = self.pass})
+		end
+		return
+	end
+
+	while true do
+		options.current_text = string.utf8sub(options.text, 1, string.utf8len(options.current_text) + 1)
+
+		if options.current_text == options.text then
+			break
+		end
+
+		if not string.match(options.current_text, "\n", -1) then
+			break
+		end
+	end
+
+	local s = options.current_text
+	local _, count1 = string.gsub(options.current_text, "\n", "")
+	local __, count2 = string.gsub(options.text, "\n", "")
+
+	for i = count1, count2 do
+		s = s .. "\n"
+	end
+
+	gui.set_text(node, s)
+	timer.delay(options.speed, false, function() type_text(self, node) end)
+end
+
+local function remove_selectors(self)
+	for _, button in ipairs(self.selectors) do
+		for __, prop in pairs(button) do
+			if type(prop) == "userdata" then
+				gui.delete_node(prop)
+			end
+		end
+		--gui.delete_node(button.node)
+		--if button.active_node then
+		--	gui.delete_node(button.active_node)
+		--end
+	end
+	self.selectors = {}
+end
+
+local function enable_button(self, node)
+	for _, button in ipairs(self.selectors) do
+		if button.node == node then
+			button.disabled = nil
+			break
+		end
+	end
+end
+
+local function get_color(self, node)
+	if node == self.text_node then
+		return self.text_color
+	end
+	return gui.get_color(node)
+end
+
+local function apply_animations(node, animations)
+	local delay = 0
+	for _, anim in ipairs(animations) do
+		delay = math.max(delay, anim.speed + (anim.delay or 0))
+		if anim.prop == "opacity" then
+			local color = gui.get_color(node)
+			color.w = anim.from or color.w
+			gui.set_color(node, color)
+			gui.animate(node, "color.w", anim.to, gui.EASING_LINEAR, anim.speed, anim.delay or 0)
+		elseif anim.prop == "scale" then
+			gui.set_scale(node, vmath.vector3(anim.from, anim.from, 1))
+			gui.animate(node, "scale", vmath.vector3(anim.to, anim.to, 1), anim.easing or gui.EASING_LINEAR, anim.speed, anim.delay or 0)
+		elseif anim.prop == "move" then
+			local pos = gui.get_position(node)
+			pos.x = anim.from and anim.from.x or pos.x
+			pos.y = anim.from and anim.from.y or pos.y
+			gui.set_position(node, pos)
+			pos.x = anim.to.x or pos.x
+			pos.y = anim.to.y or pos.y
+			gui.animate(node, "position", pos, anim.easing or gui.EASING_LINEAR, anim.speed, anim.delay or 0)
+		end
+	end
+	return delay
+end
+
+local function check_limit(text, limit, node)
+	if not limit then
+		return text
+	end
+
+	local result = ""
+	local line = ""
+	for word in S.words(text) do 
+		local check = line
+		if check ~= "" and S.lang < 3 then --no spaces in chineese
+			check = check .. " "
+		end
+		check = check .. word
+		if  gui.get_text_metrics(gui.get_font(node), check).width > limit then
+			result = result .. line .. "\n"
+			line = word
+		else
+			line = check
+			if string.match(word, "\n", -1) then
+				result = result .. line
+				line = ""
+			end
+		end
+	end
+
+	result = result .. line
+
+	return result
+end
+
+function on_message(self, message_id, message, sender)
+	local node = nil
+
+	if message_id == hash("text") then
+		local text = S.localize(message.formatted_text or message.text)
+		node = self.text_node
+		local template = nil
+		if message.x or message.y then
+			if message.template then
+				node = gui.get_node(message.template)
+				template = gui.clone_tree(node)
+				node = template[message.template]
+				if message.alt then
+					local alt_node = gui.get_node(message.template .. "_alt" .. message.alt)
+					alt_node = gui.clone(alt_node)
+					gui.set_parent(alt_node, node)
+				end
+			elseif not message.original then
+				node = gui.clone(self.text_node)
+				gui.set_parent(node, nil, true)
+				local s1 = gui.get_scale(self.text_panel)
+				local s2 = gui.get_scale(node)
+				gui.set_scale(node, vmath.vector3(s1.x * s2.x, s2.y * s1.y, 1))
+			end
+			local pos = gui.get_position(node)
+			if message.x then
+				pos.x = message.x
+			end
+			if message.y then
+				pos.y = message.y
+			end
+			gui.set_position(node, pos)
+
+			local size = gui.get_size(node)
+
+			if message.height then
+				size.y = message.height
+			end
+
+			if message.width then
+				size.x = message.width
+			elseif template then
+				local text_node = template[message.template .. "_text"]
+				local font = gui.get_font(text_node)
+				local leading = gui.get_leading(text_node)
+				pos = gui.get_position(text_node)
+				local metrics = gui.get_text_metrics(font, text, FLT_MAX, true, leading)
+				local scale = gui.get_scale(text_node)
+				local px = message.padding and (message.padding.x + message.padding.z) or math.abs(pos.x)
+				local py =  message.padding and (message.padding.y + message.padding.w) or math.abs(pos.y)
+				size.x = (metrics.width + px) * scale.x
+				size.y = (metrics.height + py) * scale.y
+			end
+
+			gui.set_size_mode(node, gui.SIZE_MODE_MANUAL)
+			gui.set_size(node, size)
+			local parent = node
+
+			if message.animate then
+				apply_animations(node, message.animate)
+			end
+
+			if template then
+				if message.speaker then
+					node = template[message.template .. "_speaker"]
+					gui.set_text(node, message.speaker)
+					pos = gui.get_position(node)
+					local parent_pivot =  gui.get_pivot(parent)
+					if parent_pivot == gui.PIVOT_SE or parent_pivot == gui.PIVOT_E or parent_pivot == gui.PIVOT_NE then
+						pos.x = pos.x - size.x
+						gui.set_position(node, pos)
+					elseif parent_pivot == gui.PIVOT_SW or parent_pivot == gui.PIVOT_W or parent_pivot == gui.PIVOT_NW then
+						pos.x = size.x - pos.x
+						gui.set_position(node, pos)
+					end
+				end
+
+				node = template[message.template .. "_text"]
+				gui.set_size_mode(node, gui.SIZE_MODE_MANUAL)
+				pos = gui.get_position(node)
+				local pivot = gui.get_pivot(node)
+				local padding = message.padding and (message.padding.x + message.padding.z) or (math.abs(pos.x) * 2)
+				size.x = size.x - padding
+				gui.set_size(node, size)
+
+				if message.padding and pivot ~= gui.PIVOT_CENTER then
+					pos.x = message.padding.x
+				end
+
+				if gui.get_pivot(parent) == gui.PIVOT_CENTER then 
+					size = gui.get_size(parent)
+					if pivot == gui.PIVOT_W or pivot == gui.PIVOT_NW or pivot == gui.PIVOT_SW then
+						pos.x = math.abs(pos.x) - size.x / 2 
+					end
+					if pivot == gui.PIVOT_N or pivot == gui.PIVOT_NW or pivot == gui.PIVOT_NE then
+						pos.y = -pos.y + size.y / 2 
+					end
+
+				elseif gui.get_pivot(parent) == gui.PIVOT_SE then 
+					size = gui.get_size(parent)
+					if pivot == gui.PIVOT_W or pivot == gui.PIVOT_NW or pivot == gui.PIVOT_SW then
+						pos.x = math.abs(pos.x) - size.x
+					end
+
+					if pivot == gui.PIVOT_N or pivot == gui.PIVOT_NW or pivot == gui.PIVOT_NE then
+						pos.y = -pos.y + size.y
+					end
+
+				elseif gui.get_pivot(parent) == gui.PIVOT_NE then 
+					size = gui.get_size(parent)
+					if pivot == gui.PIVOT_W or pivot == gui.PIVOT_NW or pivot == gui.PIVOT_SW then
+						pos.x = math.abs(pos.x) - size.x
+					end
+
+				elseif gui.get_pivot(parent) == gui.PIVOT_SW then 
+					size = gui.get_size(parent)
+					if pivot == gui.PIVOT_E or pivot == gui.PIVOT_NE or pivot == gui.PIVOT_SE then
+						pos.x = math.abs(pos.x) + size.x
+					end
+
+					if pivot == gui.PIVOT_N or pivot == gui.PIVOT_NW or pivot == gui.PIVOT_NE then
+						pos.y = -pos.y + size.y
+					end
+
+				elseif gui.get_pivot(parent) == gui.PIVOT_NW then 
+					size = gui.get_size(parent)
+					if pivot == gui.PIVOT_E or pivot == gui.PIVOT_NE or pivot == gui.PIVOT_SE then
+						pos.x = math.abs(pos.x) + size.x
+					end
+
+				end
+
+				--explicit paddings
+				if message.padding and (pivot == gui.PIVOT_N or pivot == gui.PIVOT_NW or pivot == gui.PIVOT_NE) then
+					pos.y = pos.y - message.padding.y
+				end
+
+				gui.set_position(node, pos)
+
+			end
+
+		elseif #text > 0 then
+			gui.animate(self.text_panel, "color.w", self.prompt_alpha, gui.EASING_LINEAR, 0.5)
+		else
+			gui.animate(self.text_panel, "color.w", 0, gui.EASING_LINEAR, 0.5)
+		end
+
+		gui.set_color(node, message.color or get_color(self, node))
+
+		S.localize_font(node)
+		
+		if message.speed then
+			self.typing = self.typing + 1
+			self.pass = message.pass
+			self.options[node] =
+			{
+				text = check_limit(text, message.limit, node),
+				--text = check_limit(text, 50, node),
+				speed = message.speed,
+				color = message.color or get_color(self, node),
+				current_text = ""
+			}
+			gui.set_text(node, "")
+			type_text(self, node)
+		else
+			gui.set_text(node, text)
+			msg.post(".", "text_done", {pass = message.pass})
+			self.options[node] = {}
+		end
+
+		if message.speaker and not message.template then
+			gui.set_text(self.speaker_node, message.speaker)
+			gui.set_enabled(self.speaker_node, true)
+		else
+			gui.set_text(self.speaker_node, "")
+			gui.set_enabled(self.speaker_node, false)
+		end
+
+	elseif message_id == hash("select") then
+		local total_offset = 0
+		local total = #message.select
+
+		for i = total, 1, -1 do
+			local select = message.select[i]
+			if message.random then
+				local idx = math.random(#message.select)
+				select = message.select[idx]
+				table.remove(message.select, idx)
+			end
+			local template = select.template or "select"
+
+			select.text = S.localize(select.text)
+
+			local select_node = gui.get_node(template)
+			local button = gui.clone_tree(select_node)
+			local normal = template .. "_normal"
+			local active = template .. "_active"
+			local size = gui.get_size(button[normal])
+			local scale = gui.get_scale(button[normal])
+			local delay = (message.delay or 0) * (i-1)
+
+			button["active"] = false
+			button["action"] = select.action
+			button["node"] = button[normal]
+			button.pass = message.pass
+
+			if select.speed or message.speed then
+				local color = gui.get_color(button[normal])
+				local opacity = color.w
+				color.w = 0
+				gui.set_color(button[normal], color)
+				gui.animate(button[normal], "color.w", opacity, gui.EASING_LINEAR, select.speed or message.speed, select.delay or delay or 0, enable_button)
+				button["disabled"] = true
+			end
+
+			local function init_node(state, inc, active)
+				if not button[state] then
+					return
+				end
+				S.localize_font(button[state .. "_title"])
+				gui.set_text(button[state .. "_title"], select.text)
+				gui.set_size_mode(button[state], gui.SIZE_MODE_MANUAL)
+
+				local text_width = gui.get_text_metrics_from_node(button[state .. "_title"]).width * gui.get_scale(button[state .. "_title"]).x
+
+				local width = select.width
+				if not width then
+					
+					width = text_width
+
+					local padding = 20
+					if select.padding then
+						padding = select.padding
+					end
+					width = width + padding * 2
+
+					if self.button_sizes then
+						for _, button_size in ipairs(self.button_sizes) do
+							if width < button_size then
+								width = button_size
+								break
+							end
+						end
+					end
+					
+				end
+
+				gui.set_size(button[state], vmath.vector3(width, size.y, 1))
+				if select.x and select.y then
+					gui.set_position(button[state], vmath.vector3(select.x, select.y, 0))
+					
+				else
+					local spacing = message.spacing or size.y * scale.y/3
+					local offset_x = select.offset and select.offset.x or 100
+					local offset_y = select.offset and select.offset.y or 0
+
+					if inc then
+						if total_offset == 0 then
+							total_offset = size.y * scale.y / 2 + spacing
+						else
+							total_offset = total_offset  + size.y * scale.y + spacing
+						end
+					end
+
+					gui.set_position(button[state], vmath.vector3(offset_x + width *scale.x / 2 + spacing, offset_y + total_offset, 0))
+					
+				end
+
+				gui.set_text(button[state .. "_title"], select.text)
+			end
+
+			init_node(normal, true)
+			init_node(active, false, true)
+
+			if button[active] then
+				button["active_node"] = button[active]
+				gui.set_enabled(button[active], false)
+			end
+
+			table.insert(self.selectors, button)
+		end
+
+	elseif message_id == hash("clear") then
+		if message.clear == "all" or message.clear == "select" then
+			remove_selectors(self)
+		end
+		if message.clear == "all" or message.clear == "text" then
+			gui.animate(self.text_panel, "color.w", 0, gui.EASING_LINEAR, 0.5)
+			gui.set_text(self.speaker_node, "")
+			gui.set_enabled(self.speaker_node, false)
+			gui.set_text(self.text_node, "")
+			for node in pairs(self.options) do 
+				if node ~= self.text_node then
+					gui.delete_node(gui.get_parent(node) or node)
+				end
+			end
+			self.options = {}
+		end
+
+	elseif message_id == hash("scale") then
+		gui.set_scale(gui.get_node(message.node), message.scale)
+
+	elseif message_id == hash("text_move") then
+		local pos = gui.get_position(self.text_node)
+		pos.x = message.x or pos.x
+		pos.y = message.y or pos.y
+		gui.set_position(self.text_node, pos)
+
+	elseif message_id == hash("text_restore") then
+		gui.set_position(self.text_node, self.text_pos)
+		gui.set_text(self.text_node, "")
+
+	elseif message_id == hash("set_button_width") then
+		self.button_sizes = message.sizes
+		table.sort(self.button_sizes)
+
+	elseif message_id == hash("portrait") then
+		if message.portrait == "" then
+			if message.animate then
+				local node = gui.clone(self.portrait)
+				local delay = apply_animations(node, message.animate)
+				timer.delay(delay, false, function()
+					gui.delete_node(node)
+				end)
+			end
+			apply_animations(self.shadow, {
+				{prop = "opacity", to = 0, speed = 0.5},
+				{prop = "move", to = {x = -30}, speed = 0.7, easing = gui.EASING_OUTCUBIC}
+			})
+			gui.set_enabled(self.portrait, false)
+			return
+		end
+		gui.play_flipbook(self.portrait, message.portrait)
+		gui.set_enabled(self.portrait, true)
+		if message.animate then
+			apply_animations(self.portrait, message.animate)
+			apply_animations(self.shadow, {
+				{prop = "opacity", to = 1, speed = 0.5, delay = 0.2},
+				{prop = "move", to = {x = 0}, delay = 0.2, speed = 0.7, easing = gui.EASING_OUTCUBIC}
+			})
+		end
+	end
+end
+
+
+local function stop_type(self)
+	self.typing = 0
+	local speed = 0
+	for node, option in pairs(self.options) do
+		if option.text then
+			option.current_text = option.text
+			gui.set_text(node, option.text)
+			speed = math.max(speed, option.speed)
+		end
+	end
+	return speed
+end
+
+function on_input(self, action_id, action)
+
+	if action_id == hash("click") and action.pressed and #self.selectors > 0 then
+		for _, button in ipairs(self.selectors) do
+			if gui.pick_node(button.node, action.x, action.y) and not button.disabled then
+				sound.play("/sound#click")
+				
+				if self.typing > 0 then
+					local delay = stop_type(self)
+					timer.delay(delay * 5, false, function()
+						msg.post(".", "action", {action=button.action})
+					end)
+				else
+					msg.post(".", "action", {action=button.action})
+				end
+				
+				return true
+			end
+		end
+	end
+	
+	if not action.x then  -- wtf?
+		return
+	elseif action_id == hash("click") and action.pressed and self.typing > 0 then
+		stop_type(self)
+		return true
+	
+	elseif action_id == nil and #self.selectors > 0 then
+		for _, button in ipairs(self.selectors) do
+			if gui.pick_node(button.node, action.x, action.y) and not button.disabled and not button.active and button.active_node then
+				gui.set_enabled(button.active_node, true)
+				gui.set_enabled(button.node, false)
+				button.active = true
+				sound.play("/sound#hover")
+			elseif not gui.pick_node(button.node, action.x, action.y) and button.active and not button.disabled then
+				gui.set_enabled(button.active_node, false)
+				gui.set_enabled(button.node, true)
+				button.active = false
+			end
+		end
+	end
+end

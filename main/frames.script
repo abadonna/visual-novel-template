@@ -1,0 +1,67 @@
+go.property("time", 0.05)
+go.property("total", 10)
+go.property("double_frames", false)
+go.property("autoplay", false)
+go.property("sound_frame", 0)
+go.property("total_sounds", 0)
+
+local function next_frame(self)
+	if not self.is_playing then
+		return
+	end
+
+	if self.frame == self.sound_frame and self.total_sounds > 0 and (self.step == 1 or self.sound_frame  == 1) then
+		sound.play("#sound" .. self.sound)
+		self.sound = self.sound + 1
+		if self.sound > self.total_sounds then
+			self.sound = 1
+		end
+	end
+	
+	if self.frame == self.total then
+		self.step = -1
+	elseif self.frame == 1 then
+		self.step = 1
+	end
+
+	if self.frame < self.total and self.step > 0 then
+		go.animate("#frame" .. self.frame, "tint.w", go.PLAYBACK_ONCE_FORWARD, 0, go.EASING_LINEAR, self.time, 0, next_frame)
+		if self.double_frames then
+			go.animate("#frame" .. self.frame .. "b", "tint.w", go.PLAYBACK_ONCE_FORWARD, 0, go.EASING_LINEAR, self.time)
+		end
+		self.frame = self.frame + self.step
+	else
+		self.frame = self.frame + self.step
+		go.animate("#frame" .. self.frame, "tint.w", go.PLAYBACK_ONCE_FORWARD, 1, go.EASING_LINEAR, self.time, 0, next_frame)
+		if self.double_frames then
+			go.animate("#frame" .. self.frame .. "b", "tint.w", go.PLAYBACK_ONCE_FORWARD, 1, go.EASING_LINEAR, self.time)
+		end
+	end
+end
+
+function init(self)
+	self.frame = 1
+	self.step = 1
+	self.is_playing = false
+	self.sound = 1
+	
+	if self.autoplay then
+		self.is_playing = true
+		next_frame(self)
+	end
+end
+
+function on_message(self, message_id, message, sender)
+	if message_id == hash("play") and not self.is_playing then
+		self.is_playing = true
+		next_frame(self)
+	elseif message_id == hash("stop") then
+		self.is_playing = false
+		--[[
+		for i = self.frame + 1, self.total do
+			sprite.set_constant("#frame" .. i, "tint", vmath.vector4(1,1,1,0))
+		end
+		go.animate("#frame" .. self.frame, "tint.w", go.PLAYBACK_ONCE_FORWARD, 0, go.EASING_LINEAR, 0.2)
+		--]]
+	end
+end

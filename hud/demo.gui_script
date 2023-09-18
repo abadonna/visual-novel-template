@@ -1,0 +1,25 @@
+function init(self)
+	self.button = gui.get_node("marker")
+	msg.post("main:/game", "register_choice_pattern", {pattern = "::touch::"})
+	gui.set_enabled(self.button , false)
+	gui.animate(self.button, "scale", vmath.vector3(1.2, 1.2, 1), gui.EASING_OUTELASTIC, 2,0, nil, gui.PLAYBACK_LOOP_FORWARD)
+	gui.animate(gui.get_node("point"), "scale", vmath.vector3(1.1, 1.1, 1), gui.EASING_OUTELASTIC, 2, 0, nil, gui.PLAYBACK_LOOP_FORWARD)
+end
+
+function on_message(self, message_id, message, sender)
+	if message_id == hash("choice") then
+		self.action = message.action
+		gui.set_enabled(self.button, true)
+		msg.post(".", "acquire_input_focus")
+	elseif message_id == hash("action") then
+		gui.set_enabled(self.button , false)
+	end
+end
+
+function on_input(self, action_id, action)
+	if action_id == hash("click") and action.pressed and gui.is_enabled(self.button) then
+		if gui.pick_node(self.button , action.x, action.y) then
+			msg.post("main:/game", "action", {action = self.action})
+		end
+	end
+end

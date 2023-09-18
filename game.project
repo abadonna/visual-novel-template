@@ -1,0 +1,30 @@
+[bootstrap]
+main_collection = /main/main.collectionc
+
+[script]
+shared_state = 1
+
+[display]
+width = 1920
+height = 1080
+high_dpi = 1
+
+[android]
+input_method = HiddenInputField
+
+[project]
+title = visual-novel-template
+custom_resources = assets/
+dependencies#0 = https://github.com/abadonna/defold-ink/archive/master.zip
+dependencies#1 = https://github.com/Lerg/extension-imageloader/archive/master.zip
+
+[graphics]
+texture_profiles = /main/custom.texture_profiles
+
+[input]
+gamepads = /input/fixed.gamepadsc
+
+[html5]
+heap_size = 128
+cssfile = /builtins/manifests/web/dark_theme.css
+
