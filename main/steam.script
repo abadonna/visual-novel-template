@@ -1,0 +1,53 @@
+
+local function listener(self, event, data)
+	if event == "UserStatsReceived_t" then
+		for key, _ in pairs(self.achievements) do
+			local res, val = steamworks.user_stats_get_achievement(key)
+			if res and val then
+				self.achievements[key] = true
+			end
+		end 
+	end
+end
+
+function init(self)
+	self.achievements = {
+		ACHIEVEMENT_NAME1 = false,
+	}
+	self.need_update = false
+
+	if not steamworks or not pcall(function() steamworks.init() end) then
+		pprint("Steam is not available")
+		return
+	end
+
+	self.enabled = true
+	steamworks.set_listener(listener)
+
+	steamworks.user_stats_request_current_stats()
+end
+
+function final(self)
+	if self.enabled then
+		steamworks.final()
+	end
+end
+
+function update(self, dt)
+	if self.enabled then
+		steamworks.update()
+		if self.need_update then
+			self.need_update = not steamworks.user_stats_store_stats()
+		end
+	end
+end
+
+function on_message(self, message_id, message, sender)
+	if message_id == hash("unlock") and self.enabled then
+		if not self.achievements[message.name] then
+			steamworks.user_stats_set_achievement(message.name)
+			self.achievements[message.name] = true
+			self.need_update = true
+		end
+	end
+end
