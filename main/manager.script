@@ -62,9 +62,10 @@ local function process_story(self, paragraphs, choices)
 		
 		for _, paragraph in ipairs(paragraphs) do
 			process(paragraph.tags)
-			display(paragraph.text)
-				
-			coroutine.yield()
+			if #paragraph.text > 0 then
+				display(paragraph.text)	
+				coroutine.yield()
+			end
 		end
 
 		if #choices == 0 then --end of story
@@ -72,7 +73,6 @@ local function process_story(self, paragraphs, choices)
 		else
 			local select = {}
 			for i, choice in ipairs (choices) do
-				process(choice.tags) -- (?)
 				
 				local is_button = true
 				for _, pattern in ipairs(self.patterns) do
