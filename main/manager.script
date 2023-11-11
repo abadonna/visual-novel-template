@@ -21,7 +21,7 @@ local function process(tags)
 			local data = tag:split()
 			local cmd = table.remove(data, 1)
 			if BRIDGE.action[cmd] then
-				BRIDGE.action[cmd](data)
+				BRIDGE.action[cmd](unpack(data))
 			else
 				pprint("No command '" .. cmd .. "' is defined.")
 			end

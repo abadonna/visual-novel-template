@@ -4,8 +4,8 @@
 
 -(menu)
 
-+ [New game] ->start    #WIDTH 300
-+ [Load game]           #WIDTH 300
++ [New game #WIDTH 300] ->start    
++ [Load game #WIDTH 300]           
     ~ load("slot1")
     #FADE_OUT
     No saved data.

@@ -13,8 +13,9 @@ end
 -----------------------------------------------------------
 	
 M.action["DELAY"] = function(time)
+	time = time and tonumber(time) or 0.5
 	local co = coroutine.running()
-	timer.delay(tonumber(time), false, function()
+	timer.delay(time, false, function()
 		coroutine.resume(co)
 	end)
 	coroutine.yield()
@@ -26,54 +27,54 @@ M.action["NOTEXT"] = function()
 	coroutine.yield()
 end
 
-M.action["Z"] = function(data)
-	msg.post(M.url, "action", {move = data[1], z = tonumber(data[2])})
-	table.insert(M.stack, {name = "Z", data = data})
+M.action["Z"] = function(path, z)
+	msg.post(M.url, "action", {move = path, z = z})
+	table.insert(M.stack, {name = "Z", data = {path, z}})
 end
 	
-M.action["HIDE"] = function(data)
-	local duration = data[2] and tonumber(data[2]) or 0
-	msg.post(M.url, "action", {hide = data[1], speed = duration})
-	table.insert(M.stack, {name = "HIDE", data = {data[1], 0}})
+M.action["HIDE"] = function(path, time)
+	local duration = time and tonumber(time) or 0
+	msg.post(M.url, "action", {hide = path, speed = duration})
+	table.insert(M.stack, {name = "HIDE", data = {path, 0}})
 end
 
-M.action["SHOW"] = function(data)
-	local duration = data[2] and tonumber(data[2]) or 0
-	msg.post(M.url, "action", {show = data[1], speed = duration})
-	table.insert(M.stack, {name = "SHOW", data = {data[1], 0}})
+M.action["SHOW"] = function(path, time)
+	local duration = time and tonumber(time) or 0
+	msg.post(M.url, "action", {show = path, speed = duration})
+	table.insert(M.stack, {name = "SHOW", data = {path, 0}})
 end
 
-M.action["ZOOM_IN"] = function(data)
-	local action = {scale 	= data[1], x = 1.1, y = 1.1, speed = 3, easing = gui.EASING_OUTQUAD, target = "."}
+M.action["ZOOM_IN"] = function(scale)
+	local action = {scale 	= scale, x = 1.1, y = 1.1, speed = 3, easing = gui.EASING_OUTQUAD, target = "."}
 	msg.post(M.url, "action", action)
 end
 
-M.action["ZOOM_OUT"] = function(data)
-	local action = {scale 	= data[1], x = 1., y = 1., speed = 3, easing = gui.EASING_OUTQUAD, target = "."}
+M.action["ZOOM_OUT"] = function(scale)
+	local action = {scale 	= scale, x = 1., y = 1., speed = 3, easing = gui.EASING_OUTQUAD, target = "."}
 	msg.post(M.url, "action", action)
 end
 
-M.action["SHOW_CHAR_RIGHT"] = function(data)
-	M.chars[data[1]] = 1400
-	msg.post(M.url, "action", {show = data[1], speed = .5})
-	msg.post(M.url, "action", {move = data[1], x = 1350, easing = gui.EASING_OUTQUAD, speed = 1})
-	table.insert(M.stack, {name = "SHOW", data = {data[1]}})
-	table.insert(M.stack, {name = "MOVE", data = {data[1], 1350}})
+M.action["SHOW_CHAR_RIGHT"] = function(path)
+	M.chars[path] = 1400
+	msg.post(M.url, "action", {show = path, speed = .5})
+	msg.post(M.url, "action", {move = path, x = 1350, easing = gui.EASING_OUTQUAD, speed = 1})
+	table.insert(M.stack, {name = "SHOW", data = {path}})
+	table.insert(M.stack, {name = "MOVE", data = {path, 1350}})
 end
 
-M.action["SHOW_CHAR_LEFT"] = function(data)
-	M.chars[data[1]] = 600
-	msg.post(M.url, "action", {show = data[1], speed = .5})
-	msg.post(M.url, "action", {move = data[1], x = 650, easing = gui.EASING_OUTQUAD, speed = 1})
-	table.insert(M.stack, {name = "SHOW", data = {data[1]}})
-	table.insert(M.stack, {name = "MOVE", data = {data[1], 650}})
+M.action["SHOW_CHAR_LEFT"] = function(path)
+	M.chars[path] = 600
+	msg.post(M.url, "action", {show = path, speed = .5})
+	msg.post(M.url, "action", {move = path, x = 650, easing = gui.EASING_OUTQUAD, speed = 1})
+	table.insert(M.stack, {name = "SHOW", data = {path}})
+	table.insert(M.stack, {name = "MOVE", data = {path, 650}})
 end
 
-M.action["HIDE_CHAR"] = function(data)
-	msg.post(M.url, "action", {hide = data[1], speed = .5})
-	msg.post(M.url, "action", {move = data[1], x = M.chars[data[1]], easing = gui.EASING_OUTQUAD, speed = 1})
-	table.insert(M.stack, {name = "HIDE", data = {data[1]}})
-	table.insert(M.stack, {name = "MOVE", data = {data[1], M.chars[data[1]]}})
+M.action["HIDE_CHAR"] = function(path)
+	msg.post(M.url, "action", {hide = path, speed = .5})
+	msg.post(M.url, "action", {move = path, x = M.chars[path], easing = gui.EASING_OUTQUAD, speed = 1})
+	table.insert(M.stack, {name = "HIDE", data = {path}})
+	table.insert(M.stack, {name = "MOVE", data = {path, M.chars[path]}})
 end
 
 M.action["FADE_OUT"] = function()
@@ -85,28 +86,29 @@ M.action["FADE_IN"] = function()
 	msg.post("/hud", "fade_in")
 end
 
-M.action["DELETE"] = function(data)
-	msg.post(M.url, "action", {delete = data[1]})
-	table.insert(M.stack, {name = "DELETE", data = data})
+M.action["DELETE"] = function(path)
+	msg.post(M.url, "action", {delete = path})
+	table.insert(M.stack, {name = "DELETE", data = {path}})
 end
 
-M.action["MOVE"] = function(data)
+M.action["MOVE"] = function(path, x, y, time)
 	msg.post(M.url, "action", {
-		move = data[1],
-		x = tonumber(data[2]),
-		y = data[3] and tonumber(data[3]) or nil,
-		speed = data[4] and tonumber(data[4]) or nil
+		move = path,
+		x = tonumber(x),
+		y = y and tonumber(y) or nil,
+		speed = time and tonumber(time) or nil
 	})
+	table.insert(M.stack, {name = "MOVE", data = {path, x, y, 0}})
 end
 
-M.action["SCENE"] = function(data)
-	local fade = data[2] or "fadeinout"
+M.action["SCENE"] = function(name, mode, keep)
+	local fade = mode or "fadeinout"
 	if fade == "fadeout" or fade == "fadeinout" then
 		msg.post("/hud", "fade_out")
 		M.action["DELAY"](.5)
 	end
 
-	M.load_scene(data[1], data[3])
+	M.load_scene(name, keep)
 	coroutine.yield()
 	
 	if fade == "fadein" or fade == "fadeinout" then
@@ -114,38 +116,38 @@ M.action["SCENE"] = function(data)
 	end
 end
 
-M.action["LOAD_IMAGE"] = function(data)
-	msg.post(M.url, "load_image", {url = "/" .. data[1] .. "#sprite", file = data[2]})
-	table.insert(M.stack, {name = "LOAD_IMAGE", data = data})
+M.action["LOAD_IMAGE"] = function(path, file)
+	msg.post(M.url, "load_image", {url = "/" .. path .. "#sprite", file = file})
+	table.insert(M.stack, {name = "LOAD_IMAGE", data = {path, file}})
 end
 
-M.action["LOAD_ANIM"] = function(data)
-	local count = tonumber(data[3])
+M.action["LOAD_ANIM"] = function(path, file, count)
+	count = tonumber(count)
 	for i = 1, 10 do
-		msg.post(M.url, "load_image", {url = "/" .. data[1] .. "#frame" .. i, file = data[2] .. i .. ".jpg"})
+		msg.post(M.url, "load_image", {url = "/" .. path .. "#frame" .. i, file = file .. i .. ".jpg"})
 	end
-	table.insert(M.stack, {name = "LOAD_ANIM", data = data})
+	table.insert(M.stack, {name = "LOAD_ANIM", data = {path, file, count}})
 end
 
-M.action["PLAY"] = function(data)
-	msg.post(M.scene .. ":/" .. data[1], "play")
+M.action["PLAY"] = function(path)
+	msg.post(M.scene .. ":/" .. path, "play")
 end
 
-M.action["STOP"] = function(data)
-	msg.post(M.scene .. ":/" .. data[1], "stop")
+M.action["STOP"] = function(path)
+	msg.post(M.scene .. ":/" .. path, "stop")
 end
 
-M.action["MSG"] = function(data)
-	local url = string.find(data[1], ":") ~= nil and data[1] or M.scene .. ":/" .. data[1]
-	msg.post(url, data[2])
+M.action["MSG"] = function(path, id)
+	local url = string.find(path, ":") ~= nil and path or M.scene .. ":/" .. path
+	msg.post(url, id)
 end
 
-M.action["SOUND"] = function(data)
-	msg.post(M.scene .. ":/sound#" .. data[1], "play_sound")
+M.action["SOUND"] = function(sound)
+	msg.post(M.scene .. ":/sound#" .. sound, "play_sound")
 end
 
-M.action["MUTE"] = function(data)
-	msg.post(M.scene .. ":/sound#" .. data[1], "stop_sound")
+M.action["MUTE"] = function(sound)
+	msg.post(M.scene .. ":/sound#" .. sound, "stop_sound")
 end
 
 ---------------------------------------------------------------
@@ -204,7 +206,7 @@ end
 M.restore = function(stack)
 	M.stack = {}
 	for _, item in ipairs(stack) do
-		M.action[item.name](item.data)
+		M.action[item.name](unpack(item.data))
 	end
 end
 
