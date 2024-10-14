@@ -152,6 +152,30 @@ local function check_limit(text, limit, node)
 	return result
 end
 
+local function select(self, dir)
+	if #self.selectors == 0 then return end
+	
+	local idx = dir
+	for i, button in ipairs(self.selectors) do
+		if button.active then
+			idx = idx + i
+			gui.set_enabled(button.active_node, false)
+			gui.set_enabled(button.node, true)
+			button.active = false
+			break
+		end
+	end
+
+	idx = idx < 1 and #self.selectors or idx
+	idx = idx > #self.selectors and 1 or idx
+
+	local button = self.selectors[idx]
+	gui.set_enabled(button.active_node, true)
+	gui.set_enabled(button.node, false)
+	button.active = true
+	sound.play("/sound#hover")
+end
+
 function on_message(self, message_id, message, sender)
 	local node = nil
 
@@ -468,6 +492,24 @@ function on_message(self, message_id, message, sender)
 		self.button_sizes = message.sizes
 		table.sort(self.button_sizes)
 
+	elseif message_id == hash("select_down") then
+		select(self, -1)
+	elseif message_id == hash("select_up") then
+		select(self, 1)
+	elseif message_id == hash("select_left") then
+		select(self, 1)
+	elseif message_id == hash("select_right") then
+		select(self, -1)
+	elseif message_id == hash("clear_select") then
+		for _, button in ipairs(self.selectors) do
+			if button.active then
+				gui.set_enabled(button.active_node, false)
+				gui.set_enabled(button.node, true)
+				button.active = false
+				return
+			end
+		end
+
 	elseif message_id == hash("portrait") then
 		if message.portrait == "" then
 			if message.animate then
@@ -514,21 +556,23 @@ function on_input(self, action_id, action)
 
 	if action_id == hash("click") and action.pressed and #self.selectors > 0 then
 		for _, button in ipairs(self.selectors) do
-			if gui.pick_node(button.node, action.x, action.y) and not button.disabled then
+			if button.active and not button.disabled then
 				sound.play("/sound#click")
 				
 				if self.typing > 0 then
 					local delay = stop_type(self)
 					timer.delay(delay * 5, false, function()
-						msg.post(".", "action", {action=button.action})
+						msg.post("/game", "action", {action=button.action})
 					end)
 				else
-					msg.post(".", "action", {action=button.action})
+					msg.post("/game", "action", {action=button.action})
 				end
 				
 				return true
 			end
 		end
+
+		
 	end
 	
 	if not action.x then  -- wtf?

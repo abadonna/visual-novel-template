@@ -5,10 +5,10 @@
 -(menu)
 
 + [New game #WIDTH 300] ->start    
-+ [Load game #WIDTH 300]           
-    ~ load("slot1")
++ [Load game #WIDTH 300]
     #FADE_OUT
-    No saved data.
+    #LOAD 1
+    No saved data. #FADE_IN
     ->menu
     
 //-----------------------------------------------------
@@ -22,7 +22,7 @@ Once upon a time...
 -(demo)
 + [::touch::]
     #ZOOM_IN room
-    #SHOW_CHAR_LEFT man
+    #CHR_SHOW_LEFT man
     Hans: Don't touch my wife, punk!
     #ZOOM_OUT room
     #HIDE_CHAR man
@@ -31,7 +31,7 @@ Once upon a time...
 + [Talk to her]
     #ZOOM_IN room
     #HIDE crawl .5
-    #SHOW_CHAR_RIGHT woman
+    #CHR_SHOW_RIGHT woman
     Marin: Start to make your own game already!
     #ZOOM_OUT room
     #HIDE_CHAR woman
@@ -55,20 +55,12 @@ Once upon a time...
     
 + [Start to make you own game]
 + [Save progress]
-    ~ save("slot1")
-     Game saved. #SKIP_ON_RESTORE
+    
+     Game saved. #SAVE 1
      ->demo
 
 - Finally!
 
     -> END
-    
-//-------------------------------------------------
-=== function save(slot)
-//external
-~temp x = 1
 
-=== function load(slot)
-//external
-~temp x = 1
 

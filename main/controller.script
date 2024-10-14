@@ -1,5 +1,6 @@
 function init(self)
 	self.stack = {}
+	self.frame_map = {}
 end
 
 local function move(id, x, y, z, speed, easing)
@@ -56,23 +57,25 @@ local function scale(id, x, y, speed, easing)
 end
 
 local function hide(id, speed, sprite)
+	local url = msg.url(nil, id, sprite)
 	if speed then
-		go.animate(id .. sprite, "tint.w", go.PLAYBACK_ONCE_FORWARD, 0, go.EASING_LINEAR, speed, 0, 
+		go.animate(url, "tint.w", go.PLAYBACK_ONCE_FORWARD, 0, go.EASING_LINEAR, speed, 0, 
 		function()
-			msg.post(id .. sprite, "disable")
+			msg.post(url, "disable")
 		end)
 	else
-		go.set(id .. sprite, "tint.w", 0)
-		msg.post(id .. sprite, "disable")
+		go.set(url, "tint.w", 0)
+		msg.post(url, "disable")
 	end
 end
 
 local function show(id, speed, sprite)
-	msg.post(id .. sprite, "enable")
+	local url = msg.url(nil, id, sprite)
+	msg.post(url, "enable")
 	if speed then
-		go.animate(id .. sprite, "tint.w", go.PLAYBACK_ONCE_FORWARD, 1, go.EASING_LINEAR, speed)
+		go.animate(url, "tint.w", go.PLAYBACK_ONCE_FORWARD, 1, go.EASING_LINEAR, speed)
 	else
-		go.set(id .. sprite, "tint.w", 1)
+		go.set(url, "tint.w", 1)
 	end
 end
 
@@ -82,46 +85,50 @@ local function parse_ids(val)
 end
 
 local function animate(id, prop, to, speed, easing, target)
-	local path = id .. target
-	if target == "." then
+	local path = msg.url(nil, id, target)
+	if target ~= "." then
 		path = target
 	end
 	go.animate(path, prop, go.PLAYBACK_ONCE_FORWARD, to or 0, easing or go.EASING_LINEAR, speed or 0)
+end
+
+local function get_real_id(self, id)
+	return self.frame_map[id] and self.frame_map[id].id or hash("/" .. id)
 end
 
 function process(self, action)
 
 	if action.move then
 		for id in parse_ids(action.move) do
-			move(id, action.x, action.y, action.z, action.speed, action.easing)
+			move(get_real_id(self, id), action.x, action.y, action.z, action.speed, action.easing)
 		end
 	end
 
 	if action.scale and action.target ~= "." then
 		for id in parse_ids(action.scale) do
-			scale_sprite(id, action.x, action.y, action.speed, action.easing, action.target or "#sprite")
+			scale_sprite(get_real_id(self, id), action.x, action.y, action.speed, action.easing, action.target or "#sprite")
 		end
 	elseif action.scale then
 		for id in parse_ids(action.scale) do
-			scale(id, action.x, action.y, action.speed, action.easing)
+			scale(get_real_id(self, id), action.x, action.y, action.speed, action.easing)
 		end
 	end
 
 	if action.show then
 		for id in parse_ids(action.show) do
-			show(id, action.speed, action.target or "#sprite")
+			show(get_real_id(self, id), action.speed, action.target or "sprite")
 		end
 	end
 
 	if action.hide then
 		for id in parse_ids(action.hide) do
-			hide(id, action.speed, action.target or "#sprite")
+			hide(get_real_id(self, id), action.speed, action.target or "sprite")
 		end
 	end
 
 	if action.animate and type(action.animate) ~= "table" then
 		for id in parse_ids(action.animate) do
-			animate(id, action.prop, action.to, action.speed, action.easing, action.target or "#sprite")
+			animate(get_real_id(self, id), action.prop, action.to, action.speed, action.easing, action.target or "sprite")
 		end
 	end
 
@@ -133,7 +140,7 @@ function process(self, action)
 		--TODO: remove from stack
 		for id in parse_ids(action.delete) do
 			pcall(function () 
-				go.delete(id, true)
+				go.delete(get_real_id(self,id), true)
 			end)
 		end
 	end
@@ -154,10 +161,19 @@ function on_message(self, message_id, message, sender)
 
 	elseif message_id == hash("load_image") then
 		local img = imageloader.load({
-			data = sys.load_resource("/assets/" .. message.file)
+			data = sys.load_resource("/assets/images/" .. message.file)
 		})
-		resource.set_texture(go.get(message.url, "texture0"), img.header, img.buffer )
-
+		if not go.exists(message.path) then --dynamically create go with sprite and load image in it
+			self.factory_name = self.factory_name == "#factory1" and "#factory2" or "#factory1"
+			self.new_z = self.new_z and self.new_z - 0.1 or 0.9
+			local frame_id = factory.create(self.factory_name, vmath.vector3(480, 270, self.new_z), nil, {}, vmath.vector3(0.5, 0.5 ,1))
+			self.frame_map[message.path] = {id = frame_id, sprite = msg.url(nil,frame_id, message.sprite)}
+			if go.exists("/frame") then
+				go.set_parent(frame_id, "/frame", true)
+			end
+		end
+		resource.set_texture(go.get(self.frame_map[message.path] and self.frame_map[message.path].sprite or message.path .. "#" .. message.sprite, "texture0"), img.header, img.buffer )
+		
 	elseif message_id == hash("reset") then
 		for _, action in ipairs(self.stack) do
 			process (self, action)
